@@ -1,0 +1,128 @@
+import numpy as np
+from IndividualLaminates import Laminates
+
+# 1) (20 Points) Determine
+# i) the total number of plies,
+# ii) the number of plies in each ply group,
+# iii) factor of safety (FS) for each given stress resultant for a AS/3501 carbon/epoxy laminate.
+
+# The laminate must be designed to satisfy the following requirements:
+# a. The laminate should be able to carry Nxx = 4000 lb/in and Nxy = 800 lb/in
+# b. The laminate should not exceed strains of εxx = 0.004 in/in and γxy = 0.005 in/in.
+# c. The ply thickness is tp = 0.006 in.
+# d. The final layup should be balanced and symmetric.
+# e. The laminate consist of 0°, ±45°, and 90° plies.
+# f. There must be at least 10% of the plies in each of the three major directions.
+
+
+def vector_filler(value, size):
+    v = np.zeros(size, dtype=float)
+    for i in range(0, size):
+        v[i] = value
+
+    return v
+
+
+def vector_filler_bool(size):
+    v = np.zeros(size, dtype=bool)
+    for i in range(0, size):
+        v[i] = True
+
+    return v
+
+
+def make_symmetric(v):
+    second = []
+    for i in range(0, len(v)):
+        second.append(v[i])
+    first = v
+    second.reverse()
+    return np.array(first + [0] + second)
+
+
+def main():  # a. The laminate should be able to carry Nxx = 4000 lb/in and Nxy = 800 lb/in
+    nxx = 4000.0  # lb/in
+    nyy = 0.0
+    nxy = 800.0  # lb/in
+    mxx = 0.0
+    myy = 0.0
+    mxy = 0.0
+
+    # b. The laminate should not exceed strains of εxx = 0.004 in/in and γxy = 0.005 in/in.
+    shear_xyc = .005
+    strain_xxc = .004
+
+    # d. The final layup should be balanced and symmetric.
+    # e. The laminate consist of 0°, ±45°, and 90° plies.
+    # f. There must be at least 10% of the plies in each of the three major directions.
+    angles = [0, 45, -45, 90, 0, 0]
+    angles = make_symmetric(angles)
+    n_zero = 0
+    n_forty_five = 0
+    n_ninety = 0
+    for i in range(0, len(angles)):
+        if angles[i] == 0:
+            n_zero += 1
+        elif abs(angles[i]) == 45:
+            n_forty_five += 1
+        elif angles[i] == 90:
+            n_ninety += 1
+        else:
+            print("Invalid angle")
+    n_total = n_zero + n_forty_five + n_ninety
+    precision = 3
+    p_zero = str(round(n_zero / n_total * 100, precision))
+    p_forty_five = str(round(n_forty_five / n_total * 100, precision))
+    p_ninety = str(round(n_ninety / n_total * 100, precision))
+
+    print(angles)
+    print("\nPercentage and quantity of each ply: Zero = " + p_zero + "%, " + str(n_zero) + ", Forty Five = "
+          + p_forty_five + "%, " + str(n_forty_five) + ", Ninety = " + p_ninety + "%, " + str(n_ninety) + "\n")
+
+    # c. The ply thickness is tp = 0.006 in.
+    t_ply = 0.006  # in
+    length = len(angles)
+
+    # AS/3501 carbon/epoxy laminate.
+    e11 = vector_filler(20.01 * 10 ** 6, length)
+    e22 = vector_filler(1.3 * 10 ** 6, length)
+    g12 = vector_filler(1.03 * 10 ** 6, length)
+    v12 = vector_filler(.3, length)
+    t = vector_filler(t_ply, length)
+    b = vector_filler_bool(length)
+
+    problem1 = Laminates(nxx, nyy, nxy, mxx, myy, mxy, e11, e22, g12, v12, t, angles, b)
+
+    # Define ply properties:
+
+    a = problem1.get_a()
+    h = (n_zero + n_forty_five + n_ninety)*t_ply
+    gxy = a[2][2]/h
+    exx = (a[0][0]/h) * (1-(a[0][1]**2)/(a[0][0]*a[1][1]))
+
+    print("\nTotal number of plys: " + str(n_total))
+
+    # Define Laminate Strain Allowables:
+
+    h = t_ply * (n_zero + n_forty_five + n_ninety)  # Total laminate thickness
+    print("\nTotal laminate thickness: " + str(round(h, precision)))
+
+    n_req_xy = nxy/(gxy*shear_xyc*t_ply)
+    n_req_xx = nxx/(exx*strain_xxc*t_ply)
+    print("\nPlies required to carry Nxy: " + str(round(n_req_xy, precision)))
+    print("Plies required to carry Nxx: " + str(round(n_req_xx, precision)))
+
+    global_shear = nxy/(gxy*h)
+    global_stress = nxx/(exx*h)
+    print("\nGlobal Shear \u03B3xy = " + str(round(global_shear, precision+4)))
+    print("Global Stress \u03B5xx = " + str(round(global_stress, precision+4)))
+
+    fs_shear = shear_xyc/global_shear
+    fs_strain = strain_xxc/global_stress
+    print("\nShear factor of Safety: " + str(round(fs_shear, precision)))
+    print("Strain factor of Safety: " + str(round(fs_strain, precision)))
+
+    return 0
+
+
+main()
