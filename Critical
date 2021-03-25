@@ -1,0 +1,173 @@
+import numpy as np
+from IndividualLaminates import Laminates
+
+
+class CriticalValues:
+    def __init__(self, nxx, nyy, nxy, mxx, myy, mxy, e11, e22, g12, v12, t, angles, b, slt, slc, stt, stc, slts, method):
+        self.nxx = nxx
+        self.nyy = nyy
+        self.nxy = nxy
+        self.mxx = mxx
+        self.myy = myy
+        self.mxy = mxy
+        self.e11 = e11
+        self.e22 = e22
+        self.g12 = g12
+        self.v12 = v12
+        self.t = t
+        self.angles = angles
+        self.b = b
+        self.slt = slt
+        self.slc = slc
+        self.stt = stt
+        self.stc = stc
+        self.slts = slts
+        self.method = method
+
+    def stress_loop(self):
+        nxx = self.nxx
+        nyy = self.nyy
+        nxy = self.nxy
+        mxx = self.mxx
+        myy = self.myy
+        mxy = self.mxy
+        e11 = self.e11
+        e22 = self.e22
+        g12 = self.g12
+        v12 = self.v12
+        t = self.t
+        angles = self.angles
+        b = self.b
+        slt = self.slt
+        slc = self.slc
+        stt = self.stt
+        stc = self.stc
+        slts = self.slts
+        method = self.method
+
+        r_stress = []
+        ply_fail = []
+
+        true_count = sum(b)
+
+        while true_count > 0:
+            problem1 = Laminates(nxx, nyy, nxy, mxx, myy, mxy, e11, e22, g12, v12, t, angles, b)
+            length = len(angles)
+
+            sigma11 = np.zeros(length, dtype=float)
+            for j in range(0, len(sigma11)):
+                sigma11[j] = problem1.get_local_stress_at_ply_midplane(j)[0]
+
+            sigma22 = np.zeros(length, dtype=float)
+            for k in range(0, len(sigma22)):
+                sigma22[k] = problem1.get_local_stress_at_ply_midplane(k)[1]
+
+            tau12 = np.zeros(length, dtype=float)  # Values are incorrect, must fix
+            for l in range(0, len(tau12)):
+                tau12[l] = problem1.get_local_stress_at_ply_midplane(l)[2]
+
+            # Will run either stress depending on the method
+            if method == 'Max Stress':
+                r_max = self.max_stress(length, sigma11, sigma22, tau12, slt, slc, stt, stc, slts, b)
+                r_stress.append(r_max[0])
+                b = r_max[1]
+                ply_fail.append(r_max[2])
+            elif method == 'Tsai-Wu':
+                r_max = self.tsai_wu(length, sigma11, sigma22, tau12, slt, slc, stt, stc, slts, b)
+                r_stress.append(r_max[0])
+                b = r_max[1]
+                ply_fail.append(r_max[2])
+            else:
+                print("Incorrect Input")
+            true_count = sum(b)
+        return [r_stress, ply_fail]
+
+    @staticmethod
+    def max_stress(length, sigma11, sigma22, tau12, slt, slc, stt, stc, slts, b):
+        # Maximum Stress Failure Theory
+        r11 = np.zeros(length, dtype=float)
+        for i in range(0, len(r11)):
+            if sigma11[i] >= 0:
+                r11[i] = slt / sigma11[i]
+            else:
+                r11[i] = slc / abs(sigma11[i])
+
+        r22 = np.zeros(length, dtype=float)
+        for i in range(0, len(r22)):
+            if sigma22[i] >= 0:
+                r22[i] = stt / sigma22[i]
+            else:
+                r22[i] = stc / abs(sigma22[i])
+
+        r12 = np.zeros(length, dtype=float)
+        for i in range(0, len(r12)):
+            r12[i] = slts / abs(tau12[i])
+
+        combined_r = np.concatenate((r11, r22, r12))  # Find the smallest value between r11, r22, r12
+        min_r = np.amax(combined_r)
+
+        for i in range(0, len(r11)):  # Skip over the vales that correspond to b = False
+            if b[i] == False:
+                continue
+            else:
+                if r11[i] < min_r:
+                    min_r = r11[i]
+
+        for i in range(0, len(r22)):
+            if b[i] == False:
+                continue
+            else:
+                if r22[i] < min_r:
+                    min_r = r22[i]
+
+        for i in range(0, len(r12)):
+            if b[i] == False:
+                continue
+            else:
+                if r12[i] < min_r:
+                    min_r = r12[i]
+        ply_fail = 0
+        for i in range(0, len(b)):
+            if r11[i] == min_r or r22[i] == min_r or r12[i] == min_r:
+                b[i] = False
+                ply_fail = i
+
+        return [min_r, b, ply_fail]
+
+    @staticmethod
+    def tsai_wu(length, sigma11, sigma22, tau12, slt, slc, stt, stc, slts, ply_integrity):
+        f11 = 1 / (slt * slc)
+        f22 = 1 / (stt * stc)
+        f12 = -.5 * np.sqrt(f11 * f22)
+        f66 = 1 / (slts ** 2)
+        f1 = (1 / slt) - (1 / slc)
+        f2 = (1 / stt) - (1 / stc)
+
+        a1 = np.zeros(length, dtype=float)
+        b1 = np.zeros(length, dtype=float)
+        c1 = np.zeros(length, dtype=float)
+        for i in range(0, len(a1)):
+            a1[i] = f11 * sigma11[i] ** 2 + 2 * f12 * sigma11[i] * sigma22[i] + f22 * sigma22[i] ** 2 + f66 * tau12[i] ** 2
+            b1[i] = f1 * sigma11[i] + f2 * sigma22[i]
+            c1[i] = -1.0
+
+        r1 = np.zeros(length, dtype=float)
+        for i in range(0, len(r1)):
+            r1[i] = (-b1[i] + np.sqrt(b1[i] ** 2 - 4 * a1[i] * c1[i])) / (2 * a1[i])
+
+        min_r = np.amax(r1)
+
+        for i in range(0, len(r1)):  # Skip over the vales that correspond to b = False
+            if ply_integrity[i] == False:
+                continue
+            else:
+                if r1[i] < min_r:
+                    min_r = r1[i]
+
+        ply_fail = 0
+        for i in range(0, len(ply_integrity)):
+            if r1[i] == min_r:
+                ply_integrity[i] = False
+                ply_fail = i
+
+        return [min_r, ply_integrity, ply_fail]
