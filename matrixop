@@ -1,0 +1,186 @@
+import math
+import numpy as np
+from numpy.linalg import inv
+
+
+def sin(x):
+    return math.sin(x)
+
+
+def cos(x):
+    return math.cos(x)
+
+
+def tan(x):
+    return math.tan(x)
+
+
+class ConstitutiveMatrices:
+    def __init__(self, e11, e22, v12, g12, angle, b):
+        self.e11 = e11  # Independent material properties, pg 105
+        self.e22 = e22
+        self.v12 = v12
+        self.g12 = g12
+        self.angle = angle  # Ply orientation angle in radians
+        self.v21 = (v12 * e22) / e11  # Pg 110
+        self.t = self.t_bar = self.s = self.q = self.q_bar = self.s_bar = np.array([[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+                                                                                   dtype=float)
+
+        # Ply integrity factor for each ply: b = True (intact), b = False (failed)
+        self.b = b
+
+        self.t_cal()
+        self.t_bar_cal()
+        self.s_cal()
+        self.q_cal()
+        self.q_bar_cal()
+        self.s_bar_cal()
+
+    # Getters
+    def get_e11(self):
+        return self.e11
+
+    def get_e22(self):
+        return self.e22
+
+    def get_v12(self):
+        return self.v12
+
+    def get_g12(self):
+        return self.g12
+
+    def get_v21(self):
+        return self.v21
+
+    def get_angle(self):
+        return self.angle
+
+    def get_t(self):
+        return self.t
+
+    def get_t_bar(self):
+        return self.t_bar
+
+    def get_s(self):
+        return self.s
+
+    def get_s_bar(self):
+        return self.s_bar
+
+    def get_q(self):
+        return self.q
+
+    def get_q_bar(self):
+        self.q_cal()
+        return self.q_bar
+
+    def get_b(self):
+        return self.b
+
+    # Setters
+    def set_t(self, x):
+        self.t = x
+
+    def set_t_bar(self, x):
+        self.t_bar = x
+
+    def set_s(self, x):
+        self.s = x
+
+    def set_s_bar(self, x):
+        self.s_bar = x
+
+    def set_q(self, x):
+        self.q = x
+
+    def set_q_bar(self, x):
+        self.q_bar = x
+
+    def t_cal(self):  # Stress Transformation (Global to Local), pg 112
+        # First row
+        t11 = cos(self.get_angle())**2
+        t12 = sin(self.get_angle())**2
+        t13 = 2*sin(self.get_angle())*cos(self.get_angle())
+        # Second row
+        t21 = sin(self.get_angle())**2
+        t22 = cos(self.get_angle())**2
+        t23 = -2*sin(self.get_angle())*cos(self.get_angle())
+        # Third row
+        t31 = -sin(self.get_angle())*cos(self.get_angle())
+        t32 = sin(self.get_angle())*cos(self.get_angle())
+        t33 = (cos(self.get_angle())**2)-(sin(self.get_angle())**2)
+        self.set_t(np.array([[t11, t12, t13], [t21, t22, t23], [t31, t32, t33]]))
+
+    def t_bar_cal(self):  # Strain Transformation (Global-to-Local), pg 113
+        # First row
+        t11 = cos(self.get_angle())**2
+        t12 = sin(self.get_angle())**2
+        t13 = sin(self.get_angle())*cos(self.get_angle())
+        # Second row
+        t21 = sin(self.get_angle())**2
+        t22 = cos(self.get_angle())**2
+        t23 = -sin(self.get_angle())*cos(self.get_angle())
+        # Third row
+        t31 = -2*sin(self.get_angle())*cos(self.get_angle())
+        t32 = 2*sin(self.get_angle())*cos(self.get_angle())
+        t33 = (cos(self.get_angle())**2)-(sin(self.get_angle())**2)
+        self.set_t_bar(np.array([[t11, t12, t13], [t21, t22, t23], [t31, t32, t33]]))
+
+    def s_cal(self):  # The local/lamina compliance matrix, pg 110
+        # First row
+        s11 = 1/self.get_e11()
+        s12 = self.get_v21()/self.get_e22()
+        s13 = 0
+        # Second row
+        s21 = -self.get_v12()/self.get_e11()
+        s22 = 1/self.get_e22()
+        s23 = 0
+        # Third row
+        s31 = 0
+        s32 = 0
+        s33 = 1/self.get_g12()
+        self.set_s(np.array([[s11, s12, s13], [s21, s22, s23], [s31, s32, s33]]))
+
+    def q_cal(self):  # The local/lamina stiffness matrix, pg 107, The inverse of the S matrix
+        if self.get_b():  # Ply integrity factor for each ply: β = True (intact), β = False (failed)
+            # First row
+            q11 = self.get_e11()/(1-self.get_v12()*self.get_v21())
+            q12 = (self.get_v21()*self.get_e11())/(1-self.get_v12()*self.get_v21())
+            q13 = 0.0
+            # Second row
+            q21 = (self.get_v12()*self.get_e22())/(1-self.get_v12()*self.get_v21())
+            q22 = self.get_e22()/(1-self.get_v12()*self.get_v21())
+            q23 = 0.0
+            # Third row
+            q31 = 0.0
+            q32 = 0.0
+            q33 = self.get_g12()
+            self.set_q(np.array([[q11, q12, q13], [q21, q22, q23], [q31, q32, q33]]))
+        else:
+            self.set_q(np.array([[10**-9, 10**-9, 10**-9], [10**-9, 10**-9, 10**-9], [10**-9, 10**-9, 10**-9]],
+                                dtype=float))  # Null Matrix
+
+    def q_bar_cal(self):  # The global/laminate stiffness matrix, pg 115
+        q = self.get_q()
+        # First row
+        q11 = q[0][0]*cos(self.get_angle())**4 + 2*(q[0][1]+2*q[2][2])*sin(self.get_angle())**2 * \
+              cos(self.get_angle())**2 + q[1][1]*sin(self.get_angle())**4
+        q12 = (q[0][0]+q[1][1]-4*q[2][2])*((sin(self.get_angle())**2)*(cos(self.get_angle())**2)) + \
+              q[0][1]*(sin(self.get_angle())**4 + cos(self.get_angle())**4)
+        q13 = (q[0][0]-q[0][1]-2*q[2][2])*sin(self.get_angle())*(cos(self.get_angle())**3) + \
+              (q[0][1]-q[1][1]+2*q[2][2])*sin(self.get_angle())**3 * cos(self.get_angle())
+        # Second row
+        q21 = q12
+        q22 = q[0][0] * sin(self.get_angle()) ** 4 + 2 * (q[0][1] + 2 * q[2][2]) * sin(self.get_angle()) ** 2 * \
+              cos(self.get_angle()) ** 2 + q[1][1] * cos(self.get_angle()) ** 4
+        q23 = (q[0][0]-q[0][1]-2*q[2][2])*(sin(self.get_angle())**3) * cos(self.get_angle()) + \
+              (q[0][1]-q[1][1]+2*q[2][2])*sin(self.get_angle())*(cos(self.get_angle())**3)
+        # Third row
+        q31 = q13
+        q32 = q23
+        q33 = (q[0][0]+q[1][1]-2*q[0][1]-2*q[2][2])*sin(self.get_angle())**2 * cos(self.get_angle())**2 + \
+              q[2][2]*(sin(self.get_angle())**4 + cos(self.get_angle())**4)
+        self.set_q_bar(np.array([[q11, q12, q13], [q21, q22, q23], [q31, q32, q33]]))
+
+    def s_bar_cal(self):  # The global/laminate compliance matrix, pg 107
+        self.set_s_bar(inv(self.get_q_bar()))
