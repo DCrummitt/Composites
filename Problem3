@@ -1,0 +1,149 @@
+import numpy as np
+from Critical import CriticalValues
+from IndividualLaminates import Laminates
+
+# 2) (20 Points) Determine the critical value of the normal strain for each of the following cases.
+# Draw a conclusion about the results (meaning that you MUST comment on your results).
+# The following are design requirements:
+# a. Using Scotchply uni-tape with a ply thickness of 0.005 inches
+# b. Use first-ply-failure and the Tsai-Wu failure criterion for strength ratio (R) calculation.
+
+
+def make_symmetric(v):
+    second = []
+    for i in range(0, len(v)):
+        second.append(v[i])
+    first = v
+    second.reverse()
+    return np.array(first + second)
+
+
+def all_angles():
+    a1 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 45, -45, 90, 90]
+    a1 = make_symmetric(a1)
+
+    a2 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 45, -45, 45, -45, 45, -45, 90, 90]
+    a2 = make_symmetric(a2)
+
+    a3 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 45, -45, 45, -45, 45, -45, 45, -45, 90, 90]
+    a3 = make_symmetric(a3)
+
+    a4 = [0, 0, 0, 0, 0, 0, 0, 0, 45, -45, 45, -45, 45, -45, 45, -45, 45, -45, 90, 90]
+    a4 = make_symmetric(a4)
+
+    a5 = [0, 0, 0, 0, 0, 0, 45, -45, 45, -45, 45, -45, 45, -45, 45, -45, 90, 90, 90, 90]
+    a5 = make_symmetric(a5)
+
+    a6 = [0, 0, 45, -45, 45, -45, 45, -45, 45, -45, 45, -45, 45, -45, 45, -45, 45, -45, 90, 90]
+    a6 = make_symmetric(a6)
+
+    return np.array([a1, a2, a3, a4, a5, a6])
+
+
+def percentage(a):
+    n_zero = 0
+    n_forty_five = 0
+    n_ninety = 0
+    for i in range(0, len(a)):
+        if a[i] == 0:
+            n_zero += 1
+        elif abs(a[i]) == 45:
+            n_forty_five += 1
+        elif a[i] == 90:
+            n_ninety += 1
+        else:
+            print("Invalid angle")
+    n_total = n_zero + n_forty_five + n_ninety
+    quantity = [n_zero, n_forty_five, n_ninety]
+    percent = [n_zero*(100/n_total), n_forty_five*(100/n_total), n_ninety*(100/n_total)]  # convert to percentage
+    return [quantity, percent]
+
+
+def vector_filler(value, size):
+    v = np.zeros(size, dtype=float)
+    for i in range(0, size):
+        v[i] = value
+
+    return v
+
+
+def vector_filler_bool(size):
+    v = np.zeros(size, dtype=bool)
+    for i in range(0, size):
+        v[i] = True
+
+    return v
+
+
+def main():
+    nxx = 1000.0
+    nyy = 0.0
+    nxy = 0.0
+    mxx = 0.0
+    myy = 0.0
+    mxy = 0.0
+
+    # Strength Allowables
+    slt = 154.0 * 10 ** 3
+    slc = 88.5 * 10 ** 3
+    stt = 4.5 * 10 ** 3
+    stc = 17.1 * 10 ** 3
+    slts = 10.4 * 10 ** 3
+
+    angle_list = all_angles()
+    print("Lay-up            [0/45/90]%            N\u2093\u2093                 \u03B5\u2093\u2093            R"
+          "           \u03B5\u2093\u2093c")
+    for i in range(0, len(angle_list)):
+        angles = angle_list[i]
+
+        length = len(angles)
+        # Scotchply
+        t_ply = .005
+        e11 = vector_filler(5.6 * 10 ** 6, length)
+        e22 = vector_filler(1.2 * 10 ** 6, length)
+        g12 = vector_filler(.6 * 10 ** 6, length)
+        v12 = vector_filler(.26, length)
+        t = vector_filler(t_ply, length)
+
+        b = vector_filler_bool(length)
+
+        method2 = 'Tsai-Wu'
+        part2 = CriticalValues(nxx, nyy, nxy, mxx, myy, mxy, e11, e22, g12, v12, t, angles, b, slt, slc, stt, stc, slts,
+                               method2)
+        stress_ply_tsai = part2.stress_loop()
+        r_stress_tsai = stress_ply_tsai[0]
+        ply_fail_tsai = stress_ply_tsai[1]
+
+        r1 = r_stress_tsai[0]
+        nxxc_ult = r1 * nxx
+
+        precision = 3
+
+        angles_percentage = percentage(angles)
+        p_zero = round(angles_percentage[1][0], precision)
+        n_zero = angles_percentage[0][0]/2
+        p_forty_five = round(angles_percentage[1][1], precision)
+        n_forty_five = angles_percentage[0][1]/2
+        p_ninety = round(angles_percentage[1][2], precision)
+        n_ninety = angles_percentage[0][2]/2
+
+        q = vector_filler_bool(length)
+        find_a = Laminates(nxx, nyy, nxy, mxx, myy, mxy, e11, e22, g12, v12, t, angles, q)
+        a = find_a.get_a()
+        h = (n_zero + n_forty_five + n_ninety)*t_ply
+        exx = (a[0][0]/h) * (1-(a[0][1]**2)/(a[0][0]*a[1][1]))
+
+        global_strain = nxx/(exx*h)
+        critical_global_strain = nxxc_ult/(exx*h)
+
+        print("["+str(n_zero)+"/"+str(n_forty_five)+"/"+str(n_ninety)+"]s   ", end="")
+        print("["+str(p_zero)+"%/"+str(p_forty_five)+"%/"+str(p_ninety)+"%]   ", end="")
+        print("N\u2093\u2093 = " + str(nxx) + "lb/in   \u03B5\u2093\u2093 = " + str(round(global_strain, precision+1)),
+              end="")
+        print("   R = " + str(round(r1, precision)), end="")
+        print("   \u03B5\u2093\u2093c = " + str(round(critical_global_strain, precision+1)))
+
+    return 0
+
+
+main()
